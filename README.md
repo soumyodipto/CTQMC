@@ -5,7 +5,5 @@ This module contains a CTQMC algorithm in C++ and Python used to evaluate therma
 The mathematical statement of the problem is evaluating the sum of an infinite series where each term in the series is an integral of dimension given by the index of the term or the order
 
 $$
-\begin{equation}
 Z = Z1
-\end{equation}
 $$
