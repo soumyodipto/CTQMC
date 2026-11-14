@@ -218,6 +218,42 @@ static void test_phi_config_weight_finite()
     CHECK(std::fabs(phi3 - expected) <= 1e-12 * std::fabs(expected));
 }
 
+// Exact thermal energy for V(x) = -V0*exp(-lam*x^2), box length 100, T = 0.1,
+// lam = 0.05 (finite-difference diagonalization, 20000 grid points).
+static const double kExactEnergy = -9.5093;
+
+static void test_energy_matches_exact()
+{
+    int steps = numMCsteps, equil = numEquil, interval = numObsInterval;
+    numMCsteps = 30000;
+    numEquil = 6000;
+    numObsInterval = 5;
+    set_seed(2);
+
+    std::ostringstream buf;
+    std::streambuf* old = std::cout.rdbuf(buf.rdbuf());
+    CTQMC_MarkovChain();
+    std::cout.rdbuf(old);
+
+    double sum = 0.0;
+    bool all_finite = !last_num_trace.empty();
+    for (double v : last_num_trace) {
+        all_finite = all_finite && std::isfinite(v);
+        sum += v;
+    }
+    double mean = sum / last_num_trace.size();
+    CHECK(all_finite);
+    // Seed-to-seed spread of the mean at 30k steps is about +/-0.25
+    CHECK(std::fabs(mean - kExactEnergy) < 0.5);
+    if (std::fabs(mean - kExactEnergy) >= 0.5)
+        std::cerr << "  mean energy " << mean << ", exact " << kExactEnergy << std::endl;
+
+    numMCsteps = steps;
+    numEquil = equil;
+    numObsInterval = interval;
+    set_seed_random();
+}
+
 int main()
 {
     struct { const char* name; void (*fn)(); } tests[] = {
@@ -226,6 +262,7 @@ int main()
         {"mc_move_decision_accepts_ratio_ge_one", test_mc_move_decision_accepts_ratio_ge_one},
         {"pack_new_features", test_pack_new_features},
         {"phi_config_weight_finite", test_phi_config_weight_finite},
+        {"energy_matches_exact", test_energy_matches_exact},
     };
     for (auto& t : tests) {
         int before = g_failures;
