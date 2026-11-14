@@ -125,7 +125,7 @@ double PhiConfigWeight(vec taus, int order)
 {
     taus.shed_row(0);
     vec val_add(1, fill::ones);
-    val_add *= val_add;	
+    val_add *= beta;
     taus.insert_rows(0, val_add);
     vec all_ts = GetAll_ts(taus, order);
     tuple<vec,vec> AB = ABs(all_ts, order);
@@ -399,7 +399,7 @@ void CTQMC_MarkovChain()
 	    tuple<double,double> num_phi_psi = NumConfigWeight(taus_tmp, M_tmp, timeOrder_tmp, all_ts_tmp, all_As_tmp, all_Bs_tmp);
             double num_phi = get<0>(num_phi_psi);
 	    double num_psi = get<1>(num_phi_psi);
-	    double obs_num = timeOrder_tmp*(timeOrder_tmp/beta*num_phi + num_psi)/den_configweight_tmp;
+	    double obs_num = (timeOrder_tmp/beta*num_phi + num_psi)/den_configweight_tmp;
 	    num_trace[obs_count] = obs_num;
 	    obs_count += 1;
 	

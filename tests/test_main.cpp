@@ -1,4 +1,6 @@
 // Lightweight assert-based tests for ctqmc_1d.cpp (no external test framework).
+// Each test_* function below documents what it checks. A failed CHECK prints
+// its file and line; the binary exits non-zero if any check fails.
 // Build/run with: make test
 #include <cmath>
 #include <iostream>
@@ -81,6 +83,10 @@ struct SmallChain {
     }
 };
 
+/**
+ * run_simulation(): the main() entry point (on a shortened chain) returns 0
+ * and prints "Temperature = <T>", then "Lambda = <lam>", then "time: <s>".
+ */
 static void test_run_simulation_output()
 {
     SmallChain small;
@@ -99,6 +105,13 @@ static void test_run_simulation_output()
     CHECK(out.find(expL.str()) == expT.str().size());
 }
 
+/**
+ * Reproducibility with set_seed(): two runs with the same seed print the same
+ * output (ignoring the time: line) and produce identical observable and
+ * expansion-order traces, with the expected number of observations (15),
+ * non-negative orders and finite observables. A different seed gives a
+ * different order trace, so the seed actually drives the chain.
+ */
 static void test_deterministic_with_fixed_seed()
 {
     SmallChain small;
@@ -126,6 +139,8 @@ static void test_deterministic_with_fixed_seed()
     CHECK(ord1 == ord2);
     for (size_t i = 0; i < ord1.size(); ++i)
         CHECK(ord1[i] >= 0);
+    for (size_t i = 0; i < num1.size(); ++i)
+        CHECK(std::isfinite(num1[i]));
 
     set_seed(7);
     int ret3 = -1;
@@ -134,6 +149,11 @@ static void test_deterministic_with_fixed_seed()
     CHECK(last_order_trace != ord1);
 }
 
+/**
+ * MCMoveDecision() Metropolis rule: "insert", "remove" and "stay" moves are
+ * always accepted when their acceptance ratio is >= 1 (including exactly 1).
+ * A ratio of 0 and an unknown move name are never accepted.
+ */
 static void test_mc_move_decision_accepts_ratio_ge_one()
 {
     set_seed(1);
@@ -156,6 +176,12 @@ static void test_mc_move_decision_accepts_ratio_ge_one()
     }
 }
 
+/**
+ * PackNewFeatures() proposes the next configuration: "insert" raises the
+ * expansion order by 1, "remove" lowers it by 1, "stay" keeps it, and the
+ * vector/matrix sizes follow the new order with a finite, positive weight.
+ * At order 0 it returns empty features and the free-particle weight Z0.
+ */
 static void test_pack_new_features()
 {
     set_seed(2024);
@@ -192,6 +218,77 @@ static void test_pack_new_features()
     CHECK(std::get<6>(zero_stay) == Z0);
 }
 
+/**
+ * PhiConfigWeight() (regression test for the NaN bug): for orders 1-4 it is
+ * finite and positive, and equals DenConfigWeight() of the same configuration
+ * with taus(0) replaced by beta, as in ctqmc_lowT.py.
+ */
+static void test_phi_config_weight_finite()
+{
+    // taus sorted descending in (0, beta); taus(0) is replaced by beta
+    arma::vec taus1 = {0.4 * beta};
+    arma::vec taus2 = {0.8 * beta, 0.3 * beta};
+    arma::vec taus3 = {0.9 * beta, 0.5 * beta, 0.1 * beta};
+    arma::vec taus4 = {0.95 * beta, 0.6 * beta, 0.4 * beta, 0.05 * beta};
+    double phi1 = PhiConfigWeight(taus1, 1);
+    double phi2 = PhiConfigWeight(taus2, 2);
+    double phi3 = PhiConfigWeight(taus3, 3);
+    double phi4 = PhiConfigWeight(taus4, 4);
+    CHECK(std::isfinite(phi1) && phi1 > 0.0);
+    CHECK(std::isfinite(phi2) && phi2 > 0.0);
+    CHECK(std::isfinite(phi3) && phi3 > 0.0);
+    CHECK(std::isfinite(phi4) && phi4 > 0.0);
+
+    // Equals the denominator weight of the same config with taus(0) = beta
+    arma::vec taus3_beta = {beta, 0.5 * beta, 0.1 * beta};
+    arma::vec ts = GetAll_ts(taus3_beta, 3);
+    auto AB = ABs(ts, 3);
+    double expected = DenConfigWeight(std::get<0>(AB), Make_M_matrix(std::get<1>(AB), 3), 3);
+    CHECK(std::fabs(phi3 - expected) <= 1e-12 * std::fabs(expected));
+}
+
+// Exact thermal energy for V(x) = -V0*exp(-lam*x^2), box length 100, T = 0.1,
+// lam = 0.05 (finite-difference diagonalization, 20000 grid points).
+static const double kExactEnergy = -9.5093;
+
+/**
+ * End-to-end physics check (regression test for the extra timeOrder factor):
+ * the mean energy from a seeded 30k-step chain at the default parameters is
+ * within 0.5 of the exact thermal energy kExactEnergy, and every observable
+ * is finite.
+ */
+static void test_energy_matches_exact()
+{
+    int steps = numMCsteps, equil = numEquil, interval = numObsInterval;
+    numMCsteps = 30000;
+    numEquil = 6000;
+    numObsInterval = 5;
+    set_seed(2);
+
+    std::ostringstream buf;
+    std::streambuf* old = std::cout.rdbuf(buf.rdbuf());
+    CTQMC_MarkovChain();
+    std::cout.rdbuf(old);
+
+    double sum = 0.0;
+    bool all_finite = !last_num_trace.empty();
+    for (double v : last_num_trace) {
+        all_finite = all_finite && std::isfinite(v);
+        sum += v;
+    }
+    double mean = sum / last_num_trace.size();
+    CHECK(all_finite);
+    // Seed-to-seed spread of the mean at 30k steps is about +/-0.25
+    CHECK(std::fabs(mean - kExactEnergy) < 0.5);
+    if (std::fabs(mean - kExactEnergy) >= 0.5)
+        std::cerr << "  mean energy " << mean << ", exact " << kExactEnergy << std::endl;
+
+    numMCsteps = steps;
+    numEquil = equil;
+    numObsInterval = interval;
+    set_seed_random();
+}
+
 int main()
 {
     struct { const char* name; void (*fn)(); } tests[] = {
@@ -199,6 +296,8 @@ int main()
         {"deterministic_with_fixed_seed", test_deterministic_with_fixed_seed},
         {"mc_move_decision_accepts_ratio_ge_one", test_mc_move_decision_accepts_ratio_ge_one},
         {"pack_new_features", test_pack_new_features},
+        {"phi_config_weight_finite", test_phi_config_weight_finite},
+        {"energy_matches_exact", test_energy_matches_exact},
     };
     for (auto& t : tests) {
         int before = g_failures;
