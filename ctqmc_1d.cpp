@@ -125,7 +125,7 @@ double PhiConfigWeight(vec taus, int order)
 {
     taus.shed_row(0);
     vec val_add(1, fill::ones);
-    val_add *= val_add;	
+    val_add *= beta;
     taus.insert_rows(0, val_add);
     vec all_ts = GetAll_ts(taus, order);
     tuple<vec,vec> AB = ABs(all_ts, order);

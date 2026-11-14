@@ -126,6 +126,8 @@ static void test_deterministic_with_fixed_seed()
     CHECK(ord1 == ord2);
     for (size_t i = 0; i < ord1.size(); ++i)
         CHECK(ord1[i] >= 0);
+    for (size_t i = 0; i < num1.size(); ++i)
+        CHECK(std::isfinite(num1[i]));
 
     set_seed(7);
     int ret3 = -1;
@@ -192,6 +194,30 @@ static void test_pack_new_features()
     CHECK(std::get<6>(zero_stay) == Z0);
 }
 
+static void test_phi_config_weight_finite()
+{
+    // taus sorted descending in (0, beta); taus(0) is replaced by beta
+    arma::vec taus1 = {0.4 * beta};
+    arma::vec taus2 = {0.8 * beta, 0.3 * beta};
+    arma::vec taus3 = {0.9 * beta, 0.5 * beta, 0.1 * beta};
+    arma::vec taus4 = {0.95 * beta, 0.6 * beta, 0.4 * beta, 0.05 * beta};
+    double phi1 = PhiConfigWeight(taus1, 1);
+    double phi2 = PhiConfigWeight(taus2, 2);
+    double phi3 = PhiConfigWeight(taus3, 3);
+    double phi4 = PhiConfigWeight(taus4, 4);
+    CHECK(std::isfinite(phi1) && phi1 > 0.0);
+    CHECK(std::isfinite(phi2) && phi2 > 0.0);
+    CHECK(std::isfinite(phi3) && phi3 > 0.0);
+    CHECK(std::isfinite(phi4) && phi4 > 0.0);
+
+    // Equals the denominator weight of the same config with taus(0) = beta
+    arma::vec taus3_beta = {beta, 0.5 * beta, 0.1 * beta};
+    arma::vec ts = GetAll_ts(taus3_beta, 3);
+    auto AB = ABs(ts, 3);
+    double expected = DenConfigWeight(std::get<0>(AB), Make_M_matrix(std::get<1>(AB), 3), 3);
+    CHECK(std::fabs(phi3 - expected) <= 1e-12 * std::fabs(expected));
+}
+
 int main()
 {
     struct { const char* name; void (*fn)(); } tests[] = {
@@ -199,6 +225,7 @@ int main()
         {"deterministic_with_fixed_seed", test_deterministic_with_fixed_seed},
         {"mc_move_decision_accepts_ratio_ge_one", test_mc_move_decision_accepts_ratio_ge_one},
         {"pack_new_features", test_pack_new_features},
+        {"phi_config_weight_finite", test_phi_config_weight_finite},
     };
     for (auto& t : tests) {
         int before = g_failures;
