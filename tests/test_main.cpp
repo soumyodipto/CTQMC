@@ -1,4 +1,6 @@
 // Lightweight assert-based tests for ctqmc_1d.cpp (no external test framework).
+// Each test_* function below documents what it checks. A failed CHECK prints
+// its file and line; the binary exits non-zero if any check fails.
 // Build/run with: make test
 #include <cmath>
 #include <iostream>
@@ -81,6 +83,10 @@ struct SmallChain {
     }
 };
 
+/**
+ * run_simulation(): the main() entry point (on a shortened chain) returns 0
+ * and prints "Temperature = <T>", then "Lambda = <lam>", then "time: <s>".
+ */
 static void test_run_simulation_output()
 {
     SmallChain small;
@@ -99,6 +105,13 @@ static void test_run_simulation_output()
     CHECK(out.find(expL.str()) == expT.str().size());
 }
 
+/**
+ * Reproducibility with set_seed(): two runs with the same seed print the same
+ * output (ignoring the time: line) and produce identical observable and
+ * expansion-order traces, with the expected number of observations (15),
+ * non-negative orders and finite observables. A different seed gives a
+ * different order trace, so the seed actually drives the chain.
+ */
 static void test_deterministic_with_fixed_seed()
 {
     SmallChain small;
@@ -136,6 +149,11 @@ static void test_deterministic_with_fixed_seed()
     CHECK(last_order_trace != ord1);
 }
 
+/**
+ * MCMoveDecision() Metropolis rule: "insert", "remove" and "stay" moves are
+ * always accepted when their acceptance ratio is >= 1 (including exactly 1).
+ * A ratio of 0 and an unknown move name are never accepted.
+ */
 static void test_mc_move_decision_accepts_ratio_ge_one()
 {
     set_seed(1);
@@ -158,6 +176,12 @@ static void test_mc_move_decision_accepts_ratio_ge_one()
     }
 }
 
+/**
+ * PackNewFeatures() proposes the next configuration: "insert" raises the
+ * expansion order by 1, "remove" lowers it by 1, "stay" keeps it, and the
+ * vector/matrix sizes follow the new order with a finite, positive weight.
+ * At order 0 it returns empty features and the free-particle weight Z0.
+ */
 static void test_pack_new_features()
 {
     set_seed(2024);
@@ -194,6 +218,11 @@ static void test_pack_new_features()
     CHECK(std::get<6>(zero_stay) == Z0);
 }
 
+/**
+ * PhiConfigWeight() (regression test for the NaN bug): for orders 1-4 it is
+ * finite and positive, and equals DenConfigWeight() of the same configuration
+ * with taus(0) replaced by beta, as in ctqmc_lowT.py.
+ */
 static void test_phi_config_weight_finite()
 {
     // taus sorted descending in (0, beta); taus(0) is replaced by beta
@@ -222,6 +251,12 @@ static void test_phi_config_weight_finite()
 // lam = 0.05 (finite-difference diagonalization, 20000 grid points).
 static const double kExactEnergy = -9.5093;
 
+/**
+ * End-to-end physics check (regression test for the extra timeOrder factor):
+ * the mean energy from a seeded 30k-step chain at the default parameters is
+ * within 0.5 of the exact thermal energy kExactEnergy, and every observable
+ * is finite.
+ */
 static void test_energy_matches_exact()
 {
     int steps = numMCsteps, equil = numEquil, interval = numObsInterval;
