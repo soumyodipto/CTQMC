@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <armadillo>
 #include <ctime>
+#include "ctqmc_1d.h"
 using namespace std;
 using namespace arma;
 
@@ -32,6 +33,27 @@ int numObsInterval = 5;
 //Define Z0, NegDervZ0
 double Z0 = pow(mass/(2*pi*hbar*beta), 0.5)*l;
 double NegDervZ0 = 0.5/beta*Z0;
+
+// RNG seeding: random by default; set_seed() makes runs reproducible
+bool use_fixed_seed = false;
+unsigned rng_seed = 0;
+
+void set_seed(unsigned seed)
+{
+    use_fixed_seed = true;
+    rng_seed = seed;
+    arma_rng::set_seed(seed);
+}
+
+void set_seed_random()
+{
+    use_fixed_seed = false;
+    arma_rng::set_seed_random();
+}
+
+// Observable traces of the most recent CTQMC_MarkovChain() run
+vector<double> last_num_trace;
+vector<int> last_order_trace;
 
 
 tuple<vec, vec> ABs(vec all_ts, int order)
@@ -297,7 +319,10 @@ void CTQMC_MarkovChain()
 
     int timeOrder_start = 1;	//define initial NON-ZERO timeOrder
     int timeOrder_old = timeOrder_start;
-    arma_rng::set_seed_random();  // set the seed to a random value
+    if(use_fixed_seed)
+        arma_rng::set_seed(rng_seed);
+    else
+        arma_rng::set_seed_random();  // set the seed to a random value
     vec taus_old = beta*randu<vec>(timeOrder_old);
     taus_old = sort(taus_old, "descend");
 
@@ -394,6 +419,8 @@ void CTQMC_MarkovChain()
 	if(order_trace[i] > 200)
 	    cout << "Ping" << endl;
     }    
+    last_num_trace.assign(num_trace, num_trace + obs_count);
+    last_order_trace.assign(order_trace, order_trace + obs_count);
 }
 
 
@@ -408,7 +435,7 @@ void CTQMC_MarkovChain()
 
 
 
-int main()
+int run_simulation()
 {
     int start_s=clock();
     cout << "Temperature = " << T << endl;
@@ -418,7 +445,13 @@ int main()
     int stop_s=clock();
     cout << "time: " << (stop_s-start_s)/double(CLOCKS_PER_SEC) << endl;
 
-	
-    
     return 0;
 }
+
+
+#ifndef CTQMC_NO_MAIN
+int main()
+{
+    return run_simulation();
+}
+#endif
