@@ -14,7 +14,7 @@ using namespace arma;
 
 
 
-const double pi = 3.14159;
+const double pi = acos(-1.0);
 // Define global variables
 double mass = 1.0;
 double hbar = 1.0;
